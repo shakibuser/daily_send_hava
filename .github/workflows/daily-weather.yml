@@ -2,13 +2,13 @@ name: Daily Weather Report
 
 on:
   schedule:
-    # ساعت 04:00 UTC = 07:30 تهران؛ اسکریپت خودش تا 08:00 صبر می‌کند
+    # ساعت 03:45 UTC = 07:15 تهران؛ اسکریپت خودش تا 08:00 صبر می‌کند
     # (برای جبران تاخیرهای معمول GitHub Actions)
-    - cron: "0 4 * * *"
+    - cron: "45 3 * * *"
   workflow_dispatch: {}   # اجرای دستی برای تست (بدون انتظار تا ساعت 8)
 
 permissions:
-  contents: read
+  contents: write   # فقط برای کامیت خودکار ماهانه (keep-alive)
 
 jobs:
   weather:
@@ -29,3 +29,16 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: "@saba_rasanehh"
         run: python weather_post.py
+
+      # هر ماه (روز اول) یک کامیت خالی می‌زند تا گیت‌هاب به‌خاطر
+      # ۶۰ روز بی‌فعالیتی، زمان‌بندی را غیرفعال نکند
+      - name: Keep-alive
+        if: github.event_name == 'schedule'
+        continue-on-error: true
+        run: |
+          if [ "$(date -u +%d)" = "01" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "keep-alive [skip ci]"
+            git push
+          fi
