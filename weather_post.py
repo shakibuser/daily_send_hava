@@ -9,6 +9,7 @@
 """
 
 import os
+import random
 import sys
 import time
 from datetime import datetime, timedelta
@@ -22,7 +23,7 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "@saba_rasanehh")
 API_URL = "https://api.open-meteo.com/v1/forecast"
 TEHRAN = ZoneInfo("Asia/Tehran")
-USE_PERSIAN_DIGITS = True      # True = ۱۴ مهر ۱۴۰۵ ، False = 14 مهر 1405
+USE_PERSIAN_DIGITS = True       # True = ۱۴ مهر ۱۴۰۵ ، False = 14 مهر 1405
 
 # آستانه‌ها (قابل تنظیم)
 RAIN_MM = 1.0           # بارش حداقل (میلی‌متر) برای «بارش»
@@ -30,29 +31,44 @@ GUST_STRONG = 65        # تندباد (km/h) برای «وزش باد شدید�
 ORANGE_MM, ORANGE_GUST = 25, 90
 YELLOW_MM, YELLOW_GUST = 10, 75
 
-# منطقه ← {شهر: (عرض، طول)}
-REGIONS = {
-    "شمال غرب": {"تبریز": (38.08, 46.29), "ارومیه": (37.55, 45.07),
-                 "اردبیل": (38.25, 48.30), "زنجان": (36.68, 48.48)},
-    "سواحل خزر": {"رشت": (37.28, 49.58), "ساری": (36.56, 53.06),
-                  "گرگان": (36.84, 54.43)},
-    "غرب": {"کرمانشاه": (34.31, 47.07), "سنندج": (35.31, 47.00),
-            "همدان": (34.80, 48.51), "خرم‌آباد": (33.49, 48.35),
-            "ایلام": (33.64, 46.42)},
-    "مرکز": {"تهران": (35.69, 51.39), "قزوین": (36.27, 50.00),
-             "اراک": (34.09, 49.69), "قم": (34.64, 50.88),
-             "اصفهان": (32.65, 51.67), "یزد": (31.90, 54.37),
-             "سمنان": (35.58, 53.39)},
-    "شمال شرق": {"مشهد": (36.30, 59.60), "بجنورد": (37.47, 57.33)},
-    "شرق": {"بیرجند": (32.87, 59.22)},
-    "جنوب شرق": {"کرمان": (30.28, 57.08), "زاهدان": (29.50, 60.86)},
-    "جنوب غرب": {"اهواز": (31.32, 48.67), "یاسوج": (30.67, 51.59),
-                 "شهرکرد": (32.33, 50.86)},
-    "جنوب": {"شیراز": (29.59, 52.58), "بندرعباس": (27.18, 56.27),
-             "بوشهر": (28.92, 50.84)},
+# استان ← (مرکز استان، عرض، طول)
+PROVINCES = {
+    "آذربایجان شرقی": ("تبریز", 38.08, 46.29), "آذربایجان غربی": ("ارومیه", 37.55, 45.07),
+    "اردبیل": ("اردبیل", 38.25, 48.30), "زنجان": ("زنجان", 36.68, 48.48),
+    "گیلان": ("رشت", 37.28, 49.58), "مازندران": ("ساری", 36.56, 53.06),
+    "گلستان": ("گرگان", 36.84, 54.43),
+    "کردستان": ("سنندج", 35.31, 47.00), "کرمانشاه": ("کرمانشاه", 34.31, 47.07),
+    "همدان": ("همدان", 34.80, 48.51), "لرستان": ("خرم‌آباد", 33.49, 48.35),
+    "ایلام": ("ایلام", 33.64, 46.42),
+    "مرکزی": ("اراک", 34.09, 49.69), "قزوین": ("قزوین", 36.27, 50.00),
+    "البرز": ("کرج", 35.84, 50.99), "تهران": ("تهران", 35.69, 51.39),
+    "قم": ("قم", 34.64, 50.88), "سمنان": ("سمنان", 35.58, 53.39),
+    "اصفهان": ("اصفهان", 32.65, 51.67), "یزد": ("یزد", 31.90, 54.37),
+    "خراسان رضوی": ("مشهد", 36.30, 59.60), "خراسان شمالی": ("بجنورد", 37.47, 57.33),
+    "خراسان جنوبی": ("بیرجند", 32.87, 59.22),
+    "کرمان": ("کرمان", 30.28, 57.08), "سیستان و بلوچستان": ("زاهدان", 29.50, 60.86),
+    "خوزستان": ("اهواز", 31.32, 48.67), "چهارمحال و بختیاری": ("شهرکرد", 32.33, 50.86),
+    "کهگیلویه و بویراحمد": ("یاسوج", 30.67, 51.59),
+    "فارس": ("شیراز", 29.59, 52.58), "بوشهر": ("بوشهر", 28.92, 50.84),
+    "هرمزگان": ("بندرعباس", 27.18, 56.27),
+}
+
+# منطقه ← استان‌ها (اگر همه‌ی استان‌های یک منطقه درگیر باشند، فقط نام منطقه می‌آید)
+MACROS = {
+    "شمال غرب": ["آذربایجان شرقی", "آذربایجان غربی", "اردبیل", "زنجان"],
+    "سواحل خزر": ["گیلان", "مازندران", "گلستان"],
+    "غرب": ["کردستان", "کرمانشاه", "همدان", "لرستان", "ایلام"],
+    "مرکز کشور": ["مرکزی", "قزوین", "البرز", "تهران", "قم", "سمنان", "اصفهان", "یزد"],
+    "شمال شرق": ["خراسان رضوی", "خراسان شمالی"],
+    "شرق": ["خراسان جنوبی"],
+    "جنوب شرق": ["کرمان", "سیستان و بلوچستان"],
+    "جنوب غرب": ["خوزستان", "چهارمحال و بختیاری", "کهگیلویه و بویراحمد"],
+    "جنوب": ["فارس", "بوشهر", "هرمزگان"],
 }
 # مناطق خشک که تندباد در آن‌ها معمولاً با گرد و خاک همراه است
-DRY_REGIONS = {"مرکز", "شرق", "جنوب شرق", "جنوب غرب", "جنوب"}
+DRY_MACROS = {"مرکز کشور", "شرق", "جنوب شرق", "جنوب غرب", "جنوب"}
+MACRO_OF = {p: m for m, ps in MACROS.items() for p in ps}
+DRY_PROVINCES = {p for p in PROVINCES if MACRO_OF[p] in DRY_MACROS}
 
 THUNDER = {95, 96, 99}
 SNOW = {71, 73, 75, 77, 85, 86}
@@ -66,8 +82,8 @@ FOOTER = (
     "\u200e🆔 @saba_rasanehh\n\n\u200e🔗 https://t.me/saba_rasanehh"
 )
 
-# فهرست مسطح شهرها: (منطقه، شهر، عرض، طول)
-CITIES = [(r, c, lat, lon) for r, cs in REGIONS.items() for c, (lat, lon) in cs.items()]
+# فهرست مسطح استان‌ها: (استان، مرکز، عرض، طول)
+CITIES = [(p, c, la, lo) for p, (c, la, lo) in PROVINCES.items()]
 
 
 # ---------- ابزارهای کمکی ----------
@@ -123,36 +139,67 @@ def fetch_forecast() -> list:
     sys.exit("دریافت پیش‌بینی ناموفق بود.")
 
 
-def analyse_day(data: list, i: int) -> list:
-    """وضعیت هر شهر در روز i (۰ = امروز) به‌صورت لیستی از دیکشنری."""
-    rows = []
-    for (region, city, _, _), d in zip(CITIES, data):
+def analyse_day(data: list, i: int) -> dict:
+    """وضعیت هر استان در روز i (۰ = امروز) ← {استان: دیکشنری}."""
+    out = {}
+    for (prov, city, _, _), d in zip(CITIES, data):
         dd = d["daily"]
         mm = dd["precipitation_sum"][i] or 0
         gust = dd["wind_gusts_10m_max"][i] or 0
         code = dd["weather_code"][i]
         rain = mm >= RAIN_MM
         wind = gust >= GUST_STRONG
-        rows.append({
-            "region": region, "city": city,
+        out[prov] = {
+            "city": city, "mm": mm, "gust": gust,
             "tmax": dd["temperature_2m_max"][i], "tmin": dd["temperature_2m_min"][i],
             "rain": rain,
             "snow": rain and code in SNOW,
-            "thunder": code in THUNDER,
+            "storm": rain and (code in THUNDER or mm >= 10),   # رگبار / رعد و برق
             "wind": wind,
-            "dust": wind and not rain and region in DRY_REGIONS,
+            "dust": wind and not rain and prov in DRY_PROVINCES,
             "orange": mm >= ORANGE_MM or gust >= ORANGE_GUST,
             "yellow": mm >= YELLOW_MM or gust >= YELLOW_GUST,
-        })
-    return rows
+        }
+    return out
 
 
-def regions_of(rows: list, key: str) -> list:
-    """نام مناطقی (به ترتیب تعریف) که حداقل یک شهرشان شرط key را دارد."""
-    return [r for r in REGIONS if any(x[key] for x in rows if x["region"] == r)]
+def pick(day: dict, key: str) -> set:
+    return {p for p, x in day.items() if x[key]}
+
+
+def label(provs: set) -> str:
+    """نام استان‌ها؛ اگر همه‌ی استان‌های یک منطقه باشند، نام منطقه می‌آید."""
+    parts = []
+    for macro, plist in MACROS.items():
+        hit = [p for p in plist if p in provs]
+        if len(plist) > 1 and len(hit) == len(plist):
+            parts.append(macro)
+        else:
+            parts.extend(hit)
+    return join_fa(parts)
+
+
+def macro_label(provs: set) -> str:
+    """فقط نام مناطقی که حداقل یک استانشان در مجموعه است (برای تیتر)."""
+    return join_fa([m for m, plist in MACROS.items() if any(p in provs for p in plist)])
 
 
 # ---------- ساخت متن گزارش ----------
+# جمله‌های آغازین (هر بار یکی تصادفی از دسته‌ی مناسب انتخاب می‌شود)
+OPENERS = {
+    "alert": ["آسمان امروز کمی بی‌قرار است؛ با احتیاط و آمادگی پیش بروید.",
+              "طبیعت امروز در بخش‌هایی از کشور تندخو شده؛ مراقب خودتان و عزیزانتان باشید.",
+              "امروز آسمان حرف‌های زیادی برای گفتن دارد؛ کمی بیشتر مراقب باشید."],
+    "rain": ["امروز آسمان بخش‌هایی از ایران بوی باران می‌دهد.",
+             "ابرها امروز به دیدار بخش‌هایی از کشور می‌روند و باران هدیه می‌برند.",
+             "باران امروز به خانه‌ی بخش‌هایی از ایران سر می‌زند."],
+    "wind": ["امروز باد سرِ شوخی ندارد؛ هرچه سبک است محکم ببندید.",
+             "امروز باد در بخش‌هایی از کشور بی‌تابی می‌کند."],
+    "calm": ["آسمان امروز آرام است و هوا پایدار؛ روز خوبی برای قدم‌زدن.",
+             "امروز هوا مهربان است و آسمان بی‌ادعا؛ از روزتان لذت ببرید."],
+}
+
+
 def build_report(data: list) -> str:
     now = datetime.now(TEHRAN)
     today = analyse_day(data, 0)
@@ -161,70 +208,90 @@ def build_report(data: list) -> str:
     jd = jalali(now.date())
     date_line = f"{WEEKDAYS[jd.weekday()]} {num(jd.day)} {MONTHS[jd.month - 1]} {num(jd.year)}"
 
-    rain_r, snow_r = regions_of(today, "rain"), regions_of(today, "snow")
-    wind_r, dust_r = regions_of(today, "wind"), regions_of(today, "dust")
-    orange_r, yellow_r = regions_of(today, "orange"), regions_of(today, "yellow")
+    rain, snow, storm = pick(today, "rain"), pick(today, "snow"), pick(today, "storm")
+    wind, dust = pick(today, "wind"), pick(today, "dust")
+    orange, yellow = pick(today, "orange"), pick(today, "yellow")
+    alert = orange or yellow
+    level = "نارنجی" if orange else "زرد"
 
-    # تیتر
-    if orange_r:
-        headline = f"✅ شرایط جوی ناپایدار (سطح هشدار نارنجی) در {join_fa(orange_r)}"
-    elif yellow_r:
-        headline = f"✅ شرایط جوی ناپایدار (سطح هشدار زرد) در {join_fa(yellow_r)}"
-    elif rain_r:
-        headline = f"✅ بارش در مناطقی از {join_fa(rain_r)}"
-    elif wind_r:
-        headline = f"✅ وزش باد شدید در {join_fa(wind_r)}"
+    # تیتر و جمله‌ی آغازین
+    if alert:
+        headline, mood = f"⚠️ ناپایداری جوی (سطح {level}) در {macro_label(alert)} کشور", "alert"
+    elif rain:
+        headline, mood = f"🌧 بارش در مناطقی از {macro_label(rain)} کشور", "rain"
+    elif wind:
+        headline, mood = f"💨 وزش باد شدید در {macro_label(wind)} کشور", "wind"
     else:
-        headline = "✅ جوی آرام و پایدار در بیشتر مناطق کشور"
+        headline, mood = "☀️ آسمان آرام و هوای پایدار در بیشتر مناطق کشور", "calm"
+    opener = random.choice(OPENERS[mood])
 
-    bullets = []
+    blocks = []
 
-    # امروز
-    if rain_r:
-        kind = "باران و برف" if snow_r else "باران"
-        extra = "، گاهی رگبار و رعد و برق" if any(x["thunder"] for x in today) else ""
-        bullets.append(f"🔸امروز در مناطقی از {join_fa(rain_r)} ابرناکی و بارش {kind}{extra} پیش‌بینی می‌شود.")
-    else:
-        bullets.append("🔸امروز در بیشتر مناطق کشور جوی آرام و پایدار پیش‌بینی می‌شود.")
+    # بارش امروز (رگبار و رعد و برق / باران / برف)
+    heavy, light = storm - snow, rain - storm - snow
+    if heavy:
+        blocks.append(f"⛈ آسمان {label(heavy)} امروز ابری و ناآرام است؛ رگبار، رعد و برق و وزش باد مهمان این مناطق خواهد بود.")
+    if light:
+        blocks.append(f"🌧 در {label(light)} هم ابر و بارانِ ملایم‌تر در راه است." if heavy
+                      else f"🌧 امروز در {label(light)} آسمان ابری است و باران می‌بارد.")
+    if snow:
+        blocks.append(f"❄️ در ارتفاعات {label(snow)} برف می‌نشیند.")
+    if not rain:
+        blocks.append("☀️ امروز در بیشتر مناطق کشور خبری از بارش قابل‌توجه نیست.")
 
-    if wind_r:
-        txt = f"🔸همچنین در {join_fa(wind_r)} وزش باد شدید"
-        if dust_r:
-            txt += f" و در {join_fa(dust_r)} احتمال خیزش گرد و خاک و کاهش کیفیت هوا"
-        bullets.append(txt + " دور از انتظار نیست.")
+    # باد و گرد و خاک
+    if wind:
+        top = num(round(max(today[p]["gust"] for p in wind)))
+        blocks.append(f"💨 باد در {label(wind)} تند می‌وزد (تندباد تا حدود {top} کیلومتر بر ساعت).")
+    if dust:
+        blocks.append(f"🌫 در {label(dust)} احتمال خیزش گرد و خاک و کاهش کیفیت هوا وجود دارد؛ افراد حساس و بیماران تنفسی مراقب باشند.")
 
-    if orange_r or yellow_r:
-        level = "نارنجی" if orange_r else "زرد"
-        bullets.append(f"🔸با توجه به شدت پیش‌بینی‌شده، برای {join_fa(orange_r or yellow_r)} احتیاط‌های لازم توصیه می‌شود (سطح {level}).")
+    # بیشترین بارش
+    wet = sorted(rain, key=lambda p: -today[p]["mm"])[:3]
+    if wet:
+        items = "، ".join(f"{today[p]['city']} ({num(round(today[p]['mm']))} میلی‌متر)" for p in wet)
+        blocks.append(f"💧 پربارش‌ترین شهرها: {items}")
 
-    # سه روز آینده
+    # هشدار
+    if alert:
+        blocks.append(f"⚠️ بر پایه‌ی شدت بارش و باد پیش‌بینی‌شده، برای {label(alert)} سطح هشدار {level} در نظر گرفته می‌شود؛ در تردد و فعالیت‌های فضای باز احتیاط کنید.")
+
+    # روزهای آینده
     outlook = []
-    for i, label in ((1, "فردا"), (2, None), (3, None)):
-        rows = analyse_day(data, i)
-        r, w = regions_of(rows, "rain"), regions_of(rows, "wind")
+    for i in (1, 2, 3):
+        day = analyse_day(data, i)
+        r, w = pick(day, "rain"), pick(day, "wind")
         if not (r or w):
             continue
-        day_name = WEEKDAYS[jalali(now.date() + timedelta(days=i)).weekday()]
-        parts = []
-        if r:
-            parts.append(f"بارش در {join_fa(r)}")
-        if w:
-            parts.append(f"وزش باد شدید در {join_fa(w)}")
-        outlook.append(f"🔸{label or day_name}{' (' + day_name + ')' if label else ''}: " + "؛ ".join(parts) + ".")
-    bullets += outlook or ["🔸در سه روز آینده نیز در بیشتر مناطق کشور جوی پایدار پیش‌بینی می‌شود."]
+        name = WEEKDAYS[jalali(now.date() + timedelta(days=i)).weekday()]
+        parts = ([f"🌧 بارش در {label(r)}"] if r else []) + ([f"💨 باد شدید در {label(w)}"] if w else [])
+        outlook.append(f"🔹{'فردا (' + name + ')' if i == 1 else name}: " + "؛ ".join(parts))
+    blocks.append("📅 نگاهی به روزهای پیش رو:\n" + "\n".join(outlook) if outlook
+                  else "📅 در سه روز آینده نیز در بیشتر مناطق کشور هوا پایدار و آرام می‌ماند.")
 
     # دما
-    hot = max(today, key=lambda x: x["tmax"])
-    cold = min(today, key=lambda x: x["tmin"])
-    tehran = next(x for x in today if x["city"] == "تهران")
-    bullets.append(
-        f"🔸دمای تهران: {num(round(tehran['tmin']))} تا {num(round(tehran['tmax']))} درجه | "
-        f"گرم‌ترین: {hot['city']} ({num(round(hot['tmax']))}°) | "
-        f"سردترین: {cold['city']} ({num(round(cold['tmin']))}°)"
+    hot = max(today.values(), key=lambda x: x["tmax"])
+    cold = min(today.values(), key=lambda x: x["tmin"])
+    t = today["تهران"]
+    blocks.append(
+        f"🌡 تهران: {num(round(t['tmin']))} تا {num(round(t['tmax']))} درجه\n"
+        f"🔥 گرم‌ترین: {hot['city']} ({num(round(hot['tmax']))}°)   🥶 سردترین: {cold['city']} ({num(round(cold['tmin']))}°)"
     )
 
-    return (f"{headline}\n{date_line}\n\nپیش‌بینی وضع هوا :\n\n"
-            + "\n\n".join(bullets) + "\n\n\n" + FOOTER)
+    # توصیه‌ی پایانی
+    if alert:
+        tip = "🧣 سالمندان و بیماران عزیز: تا حد امکان از تردد غیرضروری بپرهیزید و گرم بمانید."
+    elif rain:
+        tip = "☔ چتر فراموش نشود و هنگام رانندگی احتیاط کنید."
+    elif wind:
+        tip = "🚗 هنگام رانندگی و پارک خودرو مراقب باد باشید."
+    elif hot["tmax"] >= 38:
+        tip = "🥤 در ساعات گرم روز آب بنوشید و کمتر زیر آفتاب بمانید."
+    else:
+        tip = "🌿 روزتان آرام و دلنشین باد."
+
+    body = "\n\n".join([opener] + blocks + [tip])
+    return f"{headline}\n📆 {date_line}\n\n{body}\n\n\n{FOOTER}"
 
 
 # ---------- ارسال ----------
