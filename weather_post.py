@@ -22,7 +22,7 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "@saba_rasanehh")
 API_URL = "https://api.open-meteo.com/v1/forecast"
 TEHRAN = ZoneInfo("Asia/Tehran")
-USE_PERSIAN_DIGITS = False      # True = ۱۴ مهر ۱۴۰۵ ، False = 14 مهر 1405
+USE_PERSIAN_DIGITS = True      # True = ۱۴ مهر ۱۴۰۵ ، False = 14 مهر 1405
 
 # آستانه‌ها (قابل تنظیم)
 RAIN_MM = 1.0           # بارش حداقل (میلی‌متر) برای «بارش»
